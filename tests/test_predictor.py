@@ -156,6 +156,51 @@ class TestThermodynamicCalculations:
         assert result.dG_37 < 0
 
 
+class TestMagnesiumCorrection:
+    @pytest.fixture
+    def predictor(self):
+        return HairpinPredictor()
+
+    @pytest.fixture
+    def tetraloop_seq(self):
+        return "GCGCAAAAGCGC", "((((....))))"
+
+    def test_mg_only_adjustment(self, predictor, tetraloop_seq):
+        seq, struct = tetraloop_seq
+        salt = SaltConditions(Na=0.0, Mg=0.002)
+        result = predictor.predict(seq, struct, salt_conditions=salt)
+        assert result.Tm_adjusted is not None
+        assert result.Tm_adjusted != result.Tm
+
+    def test_mg_lowers_tm(self, predictor, tetraloop_seq):
+        seq, struct = tetraloop_seq
+        salt_high_mg = SaltConditions(Na=0.0, Mg=0.010)
+        salt_low_mg = SaltConditions(Na=0.0, Mg=0.001)
+        result_high = predictor.predict(seq, struct, salt_conditions=salt_high_mg)
+        result_low = predictor.predict(seq, struct, salt_conditions=salt_low_mg)
+        assert result_high.Tm_adjusted > result_low.Tm_adjusted
+
+    def test_mixed_na_mg(self, predictor, tetraloop_seq):
+        seq, struct = tetraloop_seq
+        salt = SaltConditions(Na=0.05, Mg=0.002)
+        result = predictor.predict(seq, struct, salt_conditions=salt)
+        assert result.Tm_adjusted is not None
+
+    def test_pcr_buffer_conditions(self, predictor, tetraloop_seq):
+        seq, struct = tetraloop_seq
+        salt = SaltConditions(Na=0.05, Mg=0.0015)
+        result = predictor.predict(seq, struct, salt_conditions=salt)
+        assert 40 < result.Tm_adjusted < 100
+
+    def test_no_mg_uses_na_only(self, predictor, tetraloop_seq):
+        seq, struct = tetraloop_seq
+        salt_na = SaltConditions(Na=0.05, Mg=0.0)
+        salt_mg = SaltConditions(Na=0.05, Mg=0.002)
+        result_na = predictor.predict(seq, struct, salt_conditions=salt_na)
+        result_mg = predictor.predict(seq, struct, salt_conditions=salt_mg)
+        assert result_na.Tm_adjusted != result_mg.Tm_adjusted
+
+
 class TestEnsemblePrediction:
     @pytest.fixture
     def ensemble_predictor(self):

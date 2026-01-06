@@ -28,6 +28,7 @@ from ivt_hairpinstat.core.thermodynamics import (
     calculate_dG,
     get_gc_content,
     get_na_adjusted_tm,
+    get_salt_adjusted_tm,
     calculate_duplex_tm,
 )
 
@@ -322,13 +323,18 @@ class SaltConditions:
     """Salt concentration conditions for Tm adjustment."""
 
     Na: float = 0.05  # Sodium concentration in M (default 50 mM)
-    Mg: float = 0.0  # Magnesium concentration in M (not yet implemented)
-    K: float = 0.0  # Potassium concentration in M (not yet implemented)
+    Mg: float = 0.0  # Magnesium concentration in M (default 0, e.g., 0.002 for 2mM)
+    K: float = 0.0  # Potassium concentration in M (treated as Na equivalent)
 
     @property
     def total_monovalent(self) -> float:
-        """Total monovalent cation concentration."""
+        """Total monovalent cation concentration (Na + K)."""
         return self.Na + self.K
+
+    @property
+    def has_magnesium(self) -> bool:
+        """Check if Mg2+ is present."""
+        return self.Mg > 0
 
 
 class HairpinPredictor:
@@ -534,12 +540,22 @@ class HairpinPredictor:
         seq_clean = sequence.replace("+", "") if isinstance(sequence, str) else "".join(sequence)
         gc = get_gc_content(seq_clean)
 
-        # Salt adjustment
+        # Salt adjustment (Na+ and/or Mg2+)
         Tm_adjusted = None
-        if salt_conditions and salt_conditions.Na != self.reference_na and not np.isnan(Tm):
-            Tm_adjusted = get_na_adjusted_tm(
-                Tm, gc, Na=salt_conditions.Na, from_Na=self.reference_na
+        if salt_conditions and not np.isnan(Tm):
+            needs_adjustment = (
+                salt_conditions.Na != self.reference_na or salt_conditions.has_magnesium
             )
+            if needs_adjustment:
+                n_bp = len([c for c in structure if c == "("])
+                Tm_adjusted = get_salt_adjusted_tm(
+                    Tm,
+                    gc,
+                    Na=salt_conditions.total_monovalent,
+                    Mg=salt_conditions.Mg,
+                    from_Na=self.reference_na,
+                    n_bp=n_bp if n_bp > 1 else None,
+                )
 
         # Estimate confidence based on structure type and feature coverage
         confidence = self._estimate_confidence(features, n_unknown, structure_type)
@@ -945,11 +961,21 @@ class HairpinPredictor:
             dS_ensemble = 0.0
 
         Tm_adjusted = None
-        if salt_conditions and salt_conditions.Na != self.reference_na:
-            gc = linear_result.gc_content
-            Tm_adjusted = get_na_adjusted_tm(
-                Tm_ensemble, gc, Na=salt_conditions.Na, from_Na=self.reference_na
+        if salt_conditions:
+            needs_adjustment = (
+                salt_conditions.Na != self.reference_na or salt_conditions.has_magnesium
             )
+            if needs_adjustment:
+                gc = linear_result.gc_content
+                n_bp = len([c for c in structure if c == "("])
+                Tm_adjusted = get_salt_adjusted_tm(
+                    Tm_ensemble,
+                    gc,
+                    Na=salt_conditions.total_monovalent,
+                    Mg=salt_conditions.Mg,
+                    from_Na=self.reference_na,
+                    n_bp=n_bp if n_bp > 1 else None,
+                )
 
         return PredictionResult(
             sequence=sequence,

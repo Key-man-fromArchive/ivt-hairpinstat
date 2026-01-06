@@ -38,6 +38,12 @@ def predict(
     sodium: float = typer.Option(
         0.05, "--sodium", "-na", help="Sodium concentration in M (default 50 mM)"
     ),
+    magnesium: float = typer.Option(
+        0.0,
+        "--magnesium",
+        "-mg",
+        help="Magnesium concentration in M (e.g., 0.002 for 2mM PCR buffer)",
+    ),
     dna_conc: Optional[float] = typer.Option(
         None, "--dna-conc", "-c", help="DNA concentration in M (for duplex Tm)"
     ),
@@ -86,7 +92,7 @@ def predict(
         console.print(f"[red]Error loading model: {e}[/red]")
         raise typer.Exit(1)
 
-    salt_conditions = SaltConditions(Na=sodium)
+    salt_conditions = SaltConditions(Na=sodium, Mg=magnesium)
 
     try:
         if ensemble:
@@ -160,6 +166,7 @@ def batch(
         None, "--struct-col", help="Name of structure column"
     ),
     sodium: float = typer.Option(0.05, "--sodium", "-na", help="Sodium concentration in M"),
+    magnesium: float = typer.Option(0.0, "--magnesium", "-mg", help="Magnesium concentration in M"),
     use_gnn: bool = typer.Option(False, "--gnn", "-g", help="Use GNN model for all"),
     auto_model: bool = typer.Option(False, "--auto", "-a", help="Auto-select model per structure"),
     batch_size: int = typer.Option(64, "--batch-size", "-b", help="Batch size for GNN"),
@@ -185,7 +192,7 @@ def batch(
         console.print(f"[red]GNN requires torch and torch_geometric: {e}[/red]")
         raise typer.Exit(1)
 
-    salt_conditions = SaltConditions(Na=sodium)
+    salt_conditions = SaltConditions(Na=sodium, Mg=magnesium)
 
     delimiter = "\t" if input_file.suffix == ".tsv" else ","
 

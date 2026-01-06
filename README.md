@@ -133,6 +133,7 @@ ivt-hairpinstat predict SEQUENCE [OPTIONS]
 Options:
   -s, --structure TEXT    Dot-bracket structure (required)
   -na, --sodium FLOAT     Na+ concentration in M [default: 0.05]
+  -mg, --magnesium FLOAT  Mg2+ concentration in M [default: 0]
   -g, --gnn               Use GNN model
   -a, --auto              Auto-select best model per structure
   -e, --ensemble          Ensemble prediction (Linear + GNN weighted)
@@ -160,23 +161,53 @@ ivt-hairpinstat info      # Show model status and versions
 
 ## Salt Correction
 
-Uses high-order polynomial correction from dna24 paper:
+Supports both **Na+** and **Mg2+** corrections.
 
+### Sodium-only (dna24 paper)
 ```
 1/Tm_adj = 1/Tm + (4.29*fGC - 3.95)*1e-5*ln([Na+]/[Na+]_ref)
            + 9.4*1e-6*(ln([Na+])² - ln([Na+]_ref)²)
 ```
 
-- Reference condition: 1M Na+
-- Valid range: 10mM - 1M Na+
+### Magnesium correction (Owczarzy et al. 2008)
 
-**Note**: Magnesium correction is not yet implemented. For Mg2+ containing buffers, contributions from Mg2+ should be considered separately.
+Three regimes based on R = √[Mg²⁺]/[Na⁺]:
+- **R < 0.22**: Na+ dominant → use Na-only correction
+- **0.22 ≤ R < 6**: Mixed → modified correction
+- **R ≥ 6**: Mg2+ dominant → use Mg-only correction
+
+### Examples
+
+```bash
+# Na+ only (50mM, default)
+ivt-hairpinstat predict GCGCAAAAGCGC -s "((((....))))"
+
+# Mg2+ only (2mM, typical PCR)
+ivt-hairpinstat predict GCGCAAAAGCGC -s "((((....))))" -mg 0.002 -na 0
+
+# Mixed (50mM Na+, 1.5mM Mg2+)
+ivt-hairpinstat predict GCGCAAAAGCGC -s "((((....))))" -na 0.05 -mg 0.0015
+```
+
+```python
+from ivt_hairpinstat import HairpinPredictor
+from ivt_hairpinstat.core.predictor import SaltConditions
+
+predictor = HairpinPredictor(auto_select_model=True)
+salt = SaltConditions(Na=0.05, Mg=0.0015)  # Typical PCR buffer
+result = predictor.predict('GCGCAAAAGCGC', '((((....))))', salt_conditions=salt)
+print(f"Tm (adjusted): {result.Tm_adjusted:.1f}°C")
+```
+
+### Valid Ranges
+- Reference: 1M Na+
+- Na+: 10mM - 1M
+- Mg2+: 0.5mM - 50mM
 
 ## Limitations
 
 - **Hairpin structures only** - For duplex Tm, use [primer3-py](https://github.com/libnano/primer3-py)
 - **DNA only** - RNA hairpins not supported
-- **No Mg2+ correction** - Sodium-only salt adjustment
 - **Single hairpin** - Multi-hairpin structures require manual decomposition
 
 ## Citation

@@ -172,6 +172,182 @@ def get_na_adjusted_dG(
     return calculate_dG(dH, Tm_adjusted, celsius)
 
 
+def get_mg_adjusted_tm(
+    Tm: float,
+    GC: float,
+    Mg: float,
+    Na: float = 0.0,
+    from_Na: float = 1.0,
+    dH: Optional[float] = None,
+    n_bp: Optional[int] = None,
+) -> float:
+    """
+    Adjust melting temperature for magnesium (and optionally sodium) concentration.
+
+    Based on Owczarzy et al. 2008 (Biochemistry 47:5336-5353).
+    Handles three regimes:
+    1. Mg2+ only (Na = 0)
+    2. Na+ dominant (high Na/Mg ratio)
+    3. Mg2+ dominant (low Na/Mg ratio)
+
+    Args:
+        Tm: Melting temperature at reference 1M Na+ (Celsius)
+        GC: GC content as percentage (0-100)
+        Mg: Magnesium concentration in M (e.g., 0.002 for 2mM)
+        Na: Sodium concentration in M (default 0 = Mg-only)
+        from_Na: Reference sodium concentration in M (default 1.0 M)
+        dH: Enthalpy in kcal/mol (optional, not used in current formula)
+        n_bp: Number of base pairs (optional, for length-dependent correction)
+
+    Returns:
+        Adjusted melting temperature in Celsius
+
+    Reference:
+        Owczarzy R, et al. (2008) Biochemistry 47:5336-5353
+        "Predicting stability of DNA duplexes in solutions containing
+        magnesium and monovalent cations"
+    """
+    if Mg <= 0:
+        # No Mg, use Na-only correction
+        if Na > 0:
+            return get_na_adjusted_tm(Tm, GC, Na, from_Na, dH)
+        return Tm
+
+    Tm_kelvin = Tm + 273.15
+    fGC = GC / 100.0  # Convert to fraction
+
+    # Owczarzy 2008 coefficients for Mg correction
+    a = 3.92e-5
+    b = -9.11e-6
+    c = 6.26e-5
+    d = 1.42e-5
+    e = -4.82e-4
+    f = 5.25e-4
+    g = 8.31e-5
+
+    ln_Mg = np.log(Mg)
+
+    if Na == 0:
+        # Mg-only correction (Equation 16 from Owczarzy 2008)
+        Tm_adj_inv = (
+            1.0 / Tm_kelvin
+            + a
+            + b * ln_Mg
+            + fGC * (c + d * ln_Mg)
+            + (1.0 / (2 * (n_bp - 1)) if n_bp and n_bp > 1 else 0) * (e + f * ln_Mg + g * ln_Mg**2)
+        )
+    else:
+        # Mixed Na/Mg conditions
+        # Calculate R ratio = sqrt([Mg]) / [Na]
+        R = np.sqrt(Mg) / Na
+
+        if R < 0.22:
+            # Na+ dominant - use Na-only correction
+            return get_na_adjusted_tm(Tm, GC, Na, from_Na, dH)
+        elif R < 6.0:
+            # Intermediate regime - use modified Na correction
+            # Equation 20 from Owczarzy 2008
+            a_prime = 3.92e-5 * (0.843 - 0.352 * np.sqrt(Na) * ln_Mg)
+            d_prime = 1.42e-5 * (1.279 - 4.03e-3 * ln_Mg - 8.03e-3 * ln_Mg**2)
+            g_prime = 8.31e-5 * (0.486 - 0.258 * ln_Mg + 5.25e-3 * ln_Mg**3)
+
+            Tm_adj_inv = (
+                1.0 / Tm_kelvin
+                + a_prime
+                + b * ln_Mg
+                + fGC * (c + d_prime * ln_Mg)
+                + (1.0 / (2 * (n_bp - 1)) if n_bp and n_bp > 1 else 0)
+                * (e + f * ln_Mg + g_prime * ln_Mg**2)
+            )
+        else:
+            # Mg2+ dominant - use Mg-only correction
+            Tm_adj_inv = (
+                1.0 / Tm_kelvin
+                + a
+                + b * ln_Mg
+                + fGC * (c + d * ln_Mg)
+                + (1.0 / (2 * (n_bp - 1)) if n_bp and n_bp > 1 else 0)
+                * (e + f * ln_Mg + g * ln_Mg**2)
+            )
+
+    return 1.0 / Tm_adj_inv - 273.15
+
+
+def get_salt_adjusted_tm(
+    Tm: float,
+    GC: float,
+    Na: float = 0.05,
+    Mg: float = 0.0,
+    from_Na: float = 1.0,
+    dH: Optional[float] = None,
+    n_bp: Optional[int] = None,
+) -> float:
+    """
+    Unified salt correction for Tm, handling Na+, Mg2+, or both.
+
+    This is the recommended function for salt correction as it automatically
+    selects the appropriate correction method based on ion concentrations.
+
+    Args:
+        Tm: Melting temperature at reference 1M Na+ (Celsius)
+        GC: GC content as percentage (0-100)
+        Na: Sodium concentration in M (default 0.05 = 50mM)
+        Mg: Magnesium concentration in M (default 0 = no Mg)
+        from_Na: Reference sodium concentration in M (default 1.0 M)
+        dH: Enthalpy in kcal/mol (optional)
+        n_bp: Number of base pairs (optional)
+
+    Returns:
+        Salt-adjusted melting temperature in Celsius
+
+    Examples:
+        # Na+ only (50mM)
+        >>> get_salt_adjusted_tm(70.0, 50.0, Na=0.05)
+
+        # Mg2+ only (2mM, typical PCR)
+        >>> get_salt_adjusted_tm(70.0, 50.0, Mg=0.002)
+
+        # Mixed (50mM Na+, 2mM Mg2+)
+        >>> get_salt_adjusted_tm(70.0, 50.0, Na=0.05, Mg=0.002)
+    """
+    if Mg > 0:
+        return get_mg_adjusted_tm(Tm, GC, Mg, Na, from_Na, dH, n_bp)
+    else:
+        return get_na_adjusted_tm(Tm, GC, Na, from_Na, dH)
+
+
+def get_salt_adjusted_dG(
+    Tm: float,
+    dH: float,
+    GC: float,
+    celsius: float = 37.0,
+    Na: float = 0.05,
+    Mg: float = 0.0,
+    from_Na: float = 1.0,
+    n_bp: Optional[int] = None,
+) -> float:
+    """
+    Calculate salt-adjusted free energy at given temperature.
+
+    Supports both Na+ and Mg2+ corrections.
+
+    Args:
+        Tm: Melting temperature at reference Na+ (Celsius)
+        dH: Enthalpy in kcal/mol
+        GC: GC content as percentage (0-100)
+        celsius: Target temperature in Celsius
+        Na: Sodium concentration in M
+        Mg: Magnesium concentration in M
+        from_Na: Reference sodium concentration in M
+        n_bp: Number of base pairs (optional)
+
+    Returns:
+        Salt-adjusted free energy in kcal/mol
+    """
+    Tm_adjusted = get_salt_adjusted_tm(Tm, GC, Na, Mg, from_Na, dH, n_bp)
+    return calculate_dG(dH, Tm_adjusted, celsius)
+
+
 def calculate_duplex_tm(
     dH: float,
     dG: float,
