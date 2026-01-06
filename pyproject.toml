@@ -50,9 +50,9 @@ full = [
 ivt-hairpinstat = "ivt_hairpinstat.cli.main:app"
 
 [project.urls]
-Homepage = "https://github.com/invirustech/ivt-hairpinstat"
-Repository = "https://github.com/invirustech/ivt-hairpinstat"
-Issues = "https://github.com/invirustech/ivt-hairpinstat/issues"
+Homepage = "https://github.com/Key-man-fromArchive/ivt-hairpinstat"
+Repository = "https://github.com/Key-man-fromArchive/ivt-hairpinstat"
+Issues = "https://github.com/Key-man-fromArchive/ivt-hairpinstat/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ivt_hairpinstat"]
