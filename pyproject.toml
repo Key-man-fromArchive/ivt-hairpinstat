@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ivt-hairpinstat"
+version = "0.3.0"
+description = "DNA hairpin Tm prediction with GNN and Rich Parameter models (dna24 paper)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Invirustech", email = "dev@invirustech.com"}
+]
+keywords = ["DNA", "hairpin", "Tm", "melting temperature", "thermodynamics", "GNN", "molecular biology"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "numpy>=1.24.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+gnn = [
+    "torch>=2.0.0",
+    "torch_geometric>=2.4.0",
+]
+full = [
+    "RiboGraphViz",
+    "pandas>=2.0.0",
+    "torch>=2.0.0",
+    "torch_geometric>=2.4.0",
+]
+
+[project.scripts]
+ivt-hairpinstat = "ivt_hairpinstat.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/invirustech/ivt-hairpinstat"
+Repository = "https://github.com/invirustech/ivt-hairpinstat"
+Issues = "https://github.com/invirustech/ivt-hairpinstat/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ivt_hairpinstat"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=src/ivt_hairpinstat --cov-report=term-missing"
