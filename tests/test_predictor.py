@@ -200,6 +200,47 @@ class TestMagnesiumCorrection:
         result_mg = predictor.predict(seq, struct, salt_conditions=salt_mg)
         assert result_na.Tm_adjusted != result_mg.Tm_adjusted
 
+    def test_batch_with_mg(self, predictor):
+        sequences = ["GCGCAAAAGCGC", "GCGCAAAGCGC"]
+        structures = ["((((....))))", "((((...))))"]
+        salt = SaltConditions(Na=0.05, Mg=0.002)
+        results = predictor.predict_batch(sequences, structures, salt_conditions=salt)
+        assert len(results) == 2
+        assert all(r.Tm_adjusted is not None for r in results)
+
+
+class TestGNNMagnesiumCorrection:
+    @pytest.fixture
+    def gnn_predictor(self):
+        try:
+            return HairpinPredictor(use_gnn=True)
+        except ImportError:
+            pytest.skip("GNN dependencies not available")
+
+    def test_gnn_with_mg(self, gnn_predictor):
+        salt = SaltConditions(Na=0.05, Mg=0.002)
+        result = gnn_predictor.predict("GCGCAAAAGCGC", "((((....))))", salt_conditions=salt)
+        assert result.Tm_adjusted is not None
+        assert result.prediction_method == "gnn"
+
+    def test_gnn_batch_with_mg(self, gnn_predictor):
+        sequences = ["GCGCAAAAGCGC", "GCGCAAAGCGC", "GCGCAAAAAGCGC"]
+        structures = ["((((....))))", "((((...))))", "((((.....))))"]
+        salt = SaltConditions(Na=0.05, Mg=0.0015)
+        results = gnn_predictor.predict_batch(sequences, structures, salt_conditions=salt)
+        assert len(results) == 3
+        assert all(r.Tm_adjusted is not None for r in results)
+        assert all(r.prediction_method == "gnn" for r in results)
+
+    def test_gnn_mg_affects_tm(self, gnn_predictor):
+        salt_low = SaltConditions(Na=0.0, Mg=0.001)
+        salt_high = SaltConditions(Na=0.0, Mg=0.010)
+        result_low = gnn_predictor.predict("GCGCAAAAGCGC", "((((....))))", salt_conditions=salt_low)
+        result_high = gnn_predictor.predict(
+            "GCGCAAAAGCGC", "((((....))))", salt_conditions=salt_high
+        )
+        assert result_low.Tm_adjusted != result_high.Tm_adjusted
+
 
 class TestEnsemblePrediction:
     @pytest.fixture

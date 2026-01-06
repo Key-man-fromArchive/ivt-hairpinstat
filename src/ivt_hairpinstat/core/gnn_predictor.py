@@ -22,6 +22,8 @@ import warnings
 
 import numpy as np
 
+from ivt_hairpinstat.core.thermodynamics import get_salt_adjusted_tm
+
 # Lazy imports for torch (optional dependency)
 _torch = None
 _torch_geometric = None
@@ -314,6 +316,7 @@ class GNNModel:
         sequence: str,
         structure: str,
         na_conc: float = 1.0,
+        mg_conc: float = 0.0,
     ) -> GNNPredictionResult:
         """
         Predict thermodynamic parameters using GNN.
@@ -322,6 +325,7 @@ class GNNModel:
             sequence: DNA sequence (ATCG only)
             structure: Dot-bracket structure
             na_conc: Sodium concentration in M (for salt adjustment)
+            mg_conc: Magnesium concentration in M (for salt adjustment)
 
         Returns:
             GNNPredictionResult with dH, Tm, dG_37, etc.
@@ -359,13 +363,12 @@ class GNNModel:
         # GC content
         gc = (sequence.upper().count("G") + sequence.upper().count("C")) / len(sequence) * 100
 
-        # Salt adjustment (if not 1M)
+        # Salt adjustment (Na+ and/or Mg2+)
         Tm_adjusted = None
-        if na_conc != 1.0:
-            # Owczarzy et al. 2004 salt correction
-            ln_na = np.log(na_conc)
-            Tm_adjusted = (
-                Tm + (4.29 * gc / 100 - 3.95) * ln_na + 9.40e-6 * (ln_na**2) * (Tm + 273.15)
+        n_bp = len([c for c in structure if c == "("])
+        if na_conc != 1.0 or mg_conc > 0:
+            Tm_adjusted = get_salt_adjusted_tm(
+                Tm, gc, Na=na_conc, Mg=mg_conc, from_Na=1.0, n_bp=n_bp if n_bp > 1 else None
             )
 
         return GNNPredictionResult(
@@ -385,6 +388,7 @@ class GNNModel:
         sequences: list[str],
         structures: list[str],
         na_conc: float = 1.0,
+        mg_conc: float = 0.0,
         batch_size: int = 64,
     ) -> list[GNNPredictionResult]:
         torch, _ = _import_torch()
@@ -426,10 +430,10 @@ class GNNModel:
                 gc = (seq.upper().count("G") + seq.upper().count("C")) / len(seq) * 100
 
                 Tm_adjusted = None
-                if na_conc != 1.0:
-                    ln_na = np.log(na_conc)
-                    Tm_adjusted = (
-                        Tm + (4.29 * gc / 100 - 3.95) * ln_na + 9.40e-6 * (ln_na**2) * (Tm + 273.15)
+                n_bp = len([c for c in struct if c == "("])
+                if na_conc != 1.0 or mg_conc > 0:
+                    Tm_adjusted = get_salt_adjusted_tm(
+                        Tm, gc, Na=na_conc, Mg=mg_conc, from_Na=1.0, n_bp=n_bp if n_bp > 1 else None
                     )
 
                 results.append(
@@ -488,6 +492,7 @@ class GNNPredictor:
         sequence: str,
         structure: Optional[str] = None,
         na_conc: float = 1.0,
+        mg_conc: float = 0.0,
     ) -> GNNPredictionResult:
         """
         Predict Tm for a DNA hairpin.
@@ -496,27 +501,27 @@ class GNNPredictor:
             sequence: DNA sequence
             structure: Dot-bracket (inferred if not provided)
             na_conc: Sodium concentration in M
+            mg_conc: Magnesium concentration in M
 
         Returns:
             GNNPredictionResult
         """
         if structure is None:
-            # Import here to avoid circular dependency
             from ivt_hairpinstat.core.structure_parser import DNAStructureParser
 
             parser = DNAStructureParser()
             structure = parser.get_target_structure(sequence)
 
-        return self.model.predict(sequence, structure, na_conc)
+        return self.model.predict(sequence, structure, na_conc, mg_conc)
 
     def __call__(
         self,
         sequence: str,
         structure: Optional[str] = None,
         na_conc: float = 1.0,
+        mg_conc: float = 0.0,
     ) -> GNNPredictionResult:
-        """Shorthand for predict()."""
-        return self.predict(sequence, structure, na_conc)
+        return self.predict(sequence, structure, na_conc, mg_conc)
 
 
 def is_gnn_available() -> bool:

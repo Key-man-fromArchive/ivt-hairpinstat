@@ -611,8 +611,9 @@ class HairpinPredictor:
         salt_conditions: Optional[SaltConditions] = None,
     ) -> PredictionResult:
         assert self._gnn_predictor is not None, "GNN predictor not initialized"
-        na_conc = salt_conditions.Na if salt_conditions else self.reference_na
-        gnn_result = self._gnn_predictor.predict(sequence, structure, na_conc)
+        na_conc = salt_conditions.total_monovalent if salt_conditions else self.reference_na
+        mg_conc = salt_conditions.Mg if salt_conditions else 0.0
+        gnn_result = self._gnn_predictor.predict(sequence, structure, na_conc, mg_conc)
 
         structure_type = self._classify_structure(structure)
         seq_clean = sequence.replace("+", "") if isinstance(sequence, str) else "".join(sequence)
@@ -775,9 +776,10 @@ class HairpinPredictor:
             struct_list = [parser.get_target_structure(seq) for seq in sequences]
 
         if self.use_gnn and self._gnn_predictor is not None:
-            na_conc = salt_conditions.Na if salt_conditions else self.reference_na
+            na_conc = salt_conditions.total_monovalent if salt_conditions else self.reference_na
+            mg_conc = salt_conditions.Mg if salt_conditions else 0.0
             gnn_results = self._gnn_predictor.model.predict_batch(
-                sequences, struct_list, na_conc, batch_size
+                sequences, struct_list, na_conc, mg_conc, batch_size
             )
             results = []
             for gnn_r in gnn_results:
@@ -838,10 +840,11 @@ class HairpinPredictor:
         if gnn_indices and self._gnn_predictor is not None:
             gnn_seqs = [sequences[i] for i in gnn_indices]
             gnn_structs = [structures[i] for i in gnn_indices]
-            na_conc = salt_conditions.Na if salt_conditions else self.reference_na
+            na_conc = salt_conditions.total_monovalent if salt_conditions else self.reference_na
+            mg_conc = salt_conditions.Mg if salt_conditions else 0.0
 
             gnn_results = self._gnn_predictor.model.predict_batch(
-                gnn_seqs, gnn_structs, na_conc, batch_size
+                gnn_seqs, gnn_structs, na_conc, mg_conc, batch_size
             )
 
             for idx, gnn_r in zip(gnn_indices, gnn_results):
@@ -936,9 +939,10 @@ class HairpinPredictor:
 
         linear_result = self._predict_linear(sequence, structure, salt_conditions)
 
-        na_conc = salt_conditions.Na if salt_conditions else self.reference_na
+        na_conc = salt_conditions.total_monovalent if salt_conditions else self.reference_na
+        mg_conc = salt_conditions.Mg if salt_conditions else 0.0
         assert self._gnn_predictor is not None
-        gnn_raw = self._gnn_predictor.predict(sequence, structure, na_conc)
+        gnn_raw = self._gnn_predictor.predict(sequence, structure, na_conc, mg_conc)
 
         structure_type = self._classify_structure(structure)
 
