@@ -149,6 +149,8 @@ Options:
   -o, --output TEXT       Output CSV file
   --seq-col TEXT          Sequence column [default: sequence]
   --struct-col TEXT       Structure column [default: structure]
+  -na, --sodium FLOAT     Na+ concentration in M [default: 0.05]
+  -mg, --magnesium FLOAT  Mg2+ concentration in M [default: 0]
   -g, --gnn               Use GNN for all
   -a, --auto              Auto-select per structure
   -b, --batch-size INT    GNN batch size [default: 64]
